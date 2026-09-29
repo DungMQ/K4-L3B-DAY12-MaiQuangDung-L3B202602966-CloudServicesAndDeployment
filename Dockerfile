@@ -20,15 +20,36 @@
 # Build thử: docker build -t day12-agent:prod .
 #            docker images day12-agent:prod     # xem dung lượng
 # ═══════════════════════════════════════════════════════════════════
-
-FROM python:3.11
+# ======= STAGE 1: Builder (Cài đặt thư viện) =======
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-COPY . .
+# Copy riêng requirements.txt trước để tận dụng Docker Cache
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-RUN pip install -r requirements.txt
+
+# ======= STAGE 2: Runtime (Chạy ứng dụng) =======
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+# Chỉ copy kết quả cài đặt từ stage builder sang (bỏ lại những tool thừa)
+COPY --from=builder /install /usr/local
+
+# Lúc này mới copy source code
+COPY app ./app
+
+# Tạo user thường và chuyển sang dùng user này (không chạy bằng quyền root)
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Healthcheck để Docker biết app còn sống không
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()" || exit 1
+
+# Đọc cổng từ biến môi trường (cloud tự cấp cổng khác nhau)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
