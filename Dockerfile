@@ -40,6 +40,7 @@ COPY --from=builder /install /usr/local
 
 # Lúc này mới copy source code
 COPY app ./app
+COPY utils ./utils
 
 # Tạo user thường và chuyển sang dùng user này (không chạy bằng quyền root)
 RUN useradd --create-home --uid 10001 appuser
